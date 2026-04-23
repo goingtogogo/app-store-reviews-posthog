@@ -1,5 +1,4 @@
-import type { PostHogClient } from "../posthog-client.js";
-import { errorMessage } from "../utils.js";
+import { safeFlush, type PostHogClient } from "../posthog-client.js";
 import type { AppStoreClient } from "./app-store-client.js";
 import type { Review } from "./schemas.js";
 import {
@@ -7,6 +6,9 @@ import {
   type Watermark,
   type WatermarkStore,
 } from "./watermark.js";
+
+const MAX_PAGES_PER_RUN = 25;
+const MAX_REVIEWS_PER_RUN = 1000;
 
 export interface PollResult {
   fetched: number;
@@ -38,7 +40,7 @@ export function createPoller(deps: PollerDeps): Poller {
 
       const { reviews: fetched } = await deps.appStore.fetchReviews({
         since,
-        maxPages: 25,
+        maxPages: MAX_PAGES_PER_RUN,
       });
 
       fetched.sort(
@@ -55,23 +57,14 @@ export function createPoller(deps: PollerDeps): Poller {
           skipped++;
           continue;
         }
-        if (emittedReviews.length >= 1000) {
+        if (emittedReviews.length >= MAX_REVIEWS_PER_RUN) {
           break;
         }
         deps.posthog.captureReview(review, deps.appId);
         emittedReviews.push(review);
       }
 
-      // Flush before advancing the watermark. `capture()` is fire-and-forget
-      // into an in-memory batch; without flushing, a crash would silently
-      // drop events and the watermark would move past them.
-      let flushed = true;
-      try {
-        await deps.posthog.flush();
-      } catch (error) {
-        flushed = false;
-        console.error({ event: "posthog_flush_failed", error: errorMessage(error) });
-      }
+      const flushed = await safeFlush(deps.posthog);
 
       if (flushed && emittedReviews.length > 0) {
         const next = nextWatermark(state, emittedReviews);
@@ -91,25 +84,12 @@ export function createPoller(deps: PollerDeps): Poller {
 }
 
 function nextWatermark(previous: Watermark, emitted: Review[]): Watermark {
-  const newest = emitted.reduce((a, b) =>
-    new Date(a.attributes.createdDate) >= new Date(b.attributes.createdDate)
-      ? a
-      : b,
+  const newestDate = emitted[emitted.length - 1]!.attributes.createdDate;
+  const tiedIds = new Set<string>(
+    previous.lastSeenCreatedDate === newestDate ? previous.lastSeenIds : [],
   );
-  const newestDate = newest.attributes.createdDate;
-
-  const tiedIds = new Set<string>();
-  if (previous.lastSeenCreatedDate === newestDate) {
-    for (const id of previous.lastSeenIds) tiedIds.add(id);
+  for (const r of emitted) {
+    if (r.attributes.createdDate === newestDate) tiedIds.add(r.id);
   }
-  for (const review of emitted) {
-    if (review.attributes.createdDate === newestDate) {
-      tiedIds.add(review.id);
-    }
-  }
-
-  return {
-    lastSeenCreatedDate: newestDate,
-    lastSeenIds: [...tiedIds],
-  };
+  return { lastSeenCreatedDate: newestDate, lastSeenIds: [...tiedIds] };
 }

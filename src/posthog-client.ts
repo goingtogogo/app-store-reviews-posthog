@@ -1,6 +1,7 @@
 import { PostHog } from "posthog-node";
 import type { RatingSnapshot } from "./ratings/schemas.js";
 import type { Review } from "./reviews/schemas.js";
+import { errorMessage } from "./utils.js";
 
 export interface PostHogClient {
   captureReview(review: Review, appId: string): void;
@@ -72,4 +73,17 @@ export function createPostHogClient(opts: PostHogClientOptions): PostHogClient {
       await client.shutdown();
     },
   };
+}
+
+export async function safeFlush(posthog: PostHogClient): Promise<boolean> {
+  try {
+    await posthog.flush();
+    return true;
+  } catch (error) {
+    console.error({
+      event: "posthog_flush_failed",
+      error: errorMessage(error),
+    });
+    return false;
+  }
 }

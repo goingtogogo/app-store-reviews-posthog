@@ -9,7 +9,7 @@ import { createRatingsPoller } from "./ratings/poller.js";
 import { createAppStoreClient } from "./reviews/app-store-client.js";
 import { createPoller } from "./reviews/poller.js";
 import { createJsonWatermarkStore } from "./reviews/watermark.js";
-import { createScheduler, type Scheduler } from "./scheduler.js";
+import { createScheduler } from "./scheduler.js";
 
 const config = loadConfig();
 
@@ -35,11 +35,6 @@ const reviewsPoller = createPoller({
   backfillDays: config.BACKFILL_DAYS,
 });
 
-const reviewsScheduler = createScheduler({
-  intervalMs: config.POLL_INTERVAL_MS,
-  tick: () => reviewsPoller.run(),
-});
-
 const itunes = createITunesClient({ appId: config.ASC_APP_ID });
 
 const ratingsPoller = createRatingsPoller({
@@ -48,9 +43,12 @@ const ratingsPoller = createRatingsPoller({
   countries: config.RATINGS_COUNTRIES,
 });
 
-const ratingsScheduler = createScheduler({
+const scheduler = createScheduler({
   intervalMs: config.POLL_INTERVAL_MS,
-  tick: () => ratingsPoller.run(),
+  tick: async () => {
+    await reviewsPoller.run();
+    await ratingsPoller.run();
+  },
 });
 
 const app = new Hono();
@@ -68,13 +66,11 @@ const server = serve({ fetch: app.fetch, port: config.PORT }, (info) => {
   console.log(`Listening on http://localhost:${info.port}`);
 });
 
-reviewsScheduler.start();
-ratingsScheduler.start();
+scheduler.start();
 
 async function shutdown(signal: string): Promise<void> {
   console.log({ event: "shutting_down", signal });
-  await reviewsScheduler.stop();
-  await ratingsScheduler.stop();
+  await scheduler.stop();
   await posthog.shutdown();
   server.close(() => {
     console.log({ event: "shutdown_complete" });

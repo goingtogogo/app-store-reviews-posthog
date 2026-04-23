@@ -85,8 +85,6 @@ export function createAppStoreClient(
         for (const review of parsed.data) {
           if (since) {
             const createdAt = new Date(review.attributes.createdDate);
-            // Strict `<` so reviews with the *same* createdDate as the
-            // watermark are re-fetched; the poller dedupes via lastSeenIds.
             if (createdAt < since) {
               return { reviews };
             }

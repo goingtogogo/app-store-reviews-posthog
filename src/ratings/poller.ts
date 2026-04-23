@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { PostHogClient } from "../posthog-client.js";
+import { safeFlush, type PostHogClient } from "../posthog-client.js";
 import { errorMessage } from "../utils.js";
 import type { ITunesClient } from "./itunes-client.js";
 import type { RatingSnapshot } from "./schemas.js";
@@ -52,14 +52,7 @@ export function createRatingsPoller(deps: RatingsPollerDeps): RatingsPoller {
         }
       }
 
-      try {
-        await deps.posthog.flush();
-      } catch (error) {
-        console.error({
-          event: "posthog_flush_failed",
-          error: errorMessage(error),
-        });
-      }
+      await safeFlush(deps.posthog);
 
       const result: RatingsPollResult = {
         countriesPolled: deps.countries.length,
@@ -69,14 +62,8 @@ export function createRatingsPoller(deps: RatingsPollerDeps): RatingsPoller {
         durationMs: Date.now() - startedAt,
         snapshots,
       };
-      console.info({
-        event: "ratings_poll_completed",
-        countriesPolled: result.countriesPolled,
-        captured: result.captured,
-        missing: result.missing,
-        failed: result.failed,
-        durationMs: result.durationMs,
-      });
+      const { snapshots: _snapshots, ...logFields } = result;
+      console.info({ event: "ratings_poll_completed", ...logFields });
       return result;
     },
   };
