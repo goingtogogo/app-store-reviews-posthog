@@ -1,4 +1,4 @@
-# app-store-reviews-posthog
+# App Store Reviews to Posthog
 
 Pull customer reviews and ratings from the App Store (via App Store Connect API) and forward them to PostHog as events, so this data lives in one place alongside the rest of product analytics.
 
