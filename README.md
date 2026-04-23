@@ -52,10 +52,9 @@ properties:
   source:   "app_store_connect_api"
 ```
 
-Build trends, breakdowns (by rating / territory), or SQL insights on top.
+✨ Build trends, breakdowns (by rating / territory), or SQL insights on top ✨
 
 ## Limitations
 
 - Single iOS app per process
-- Reviews pipeline pulls whatever ASC exposes. If Apple moderates a review out of the feed, this tool won't tombstone previously-emitted events
 - No review-reply capture
