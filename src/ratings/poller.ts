@@ -44,14 +44,21 @@ export function createRatingsPoller(deps: RatingsPollerDeps): RatingsPoller {
           snapshots.push(snapshot);
         } catch (error) {
           failed++;
-          console.error({ event: "rating_snapshot_failed", country, error: errorMessage(error) });
+          console.error({
+            event: "rating_snapshot_failed",
+            country,
+            error: errorMessage(error),
+          });
         }
       }
 
       try {
         await deps.posthog.flush();
       } catch (error) {
-        console.error({ event: "posthog_flush_failed", error: errorMessage(error) });
+        console.error({
+          event: "posthog_flush_failed",
+          error: errorMessage(error),
+        });
       }
 
       const result: RatingsPollResult = {
@@ -62,7 +69,14 @@ export function createRatingsPoller(deps: RatingsPollerDeps): RatingsPoller {
         durationMs: Date.now() - startedAt,
         snapshots,
       };
-      console.info({ event: "ratings_poll_completed", ...result });
+      console.info({
+        event: "ratings_poll_completed",
+        countriesPolled: result.countriesPolled,
+        captured: result.captured,
+        missing: result.missing,
+        failed: result.failed,
+        durationMs: result.durationMs,
+      });
       return result;
     },
   };
